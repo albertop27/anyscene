@@ -1,0 +1,58 @@
+{
+ "book_press": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: matches ref; Pixal3D canonicalize knocked it on its side (legs)"
+ },
+ "paper_cutter": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: clean lever and stand; Pixal3D canonicalize put it upside down"
+ },
+ "sewing_frame": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: tie with Pixal3D; cords cleaner"
+ },
+ "desk_lamp": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: tie; slightly crisper joints"
+ },
+ "pendant_lamp": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: Pixal3D canonicalize rotated it 90 degrees"
+ },
+ "paper_roll_rack": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: Pixal3D canonicalize laid it flat"
+ },
+ "stool": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: Pixal3D canonicalize tipped it over"
+ },
+ "old_radio": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: faithful grille and dial; Pixal3D came out back-to-front"
+ },
+ "plant_pot": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: tie; fuller fronds"
+ },
+ "glue_pot": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: tie"
+ },
+ "bone_folder_set": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: tie; tools more separated"
+ },
+ "leather_stack": {
+  "model": "pixal3d",
+  "why": "Pixal3D: burgundy/green/tan layers closer to the reference; TRELLIS went dark"
+ },
+ "book_stack": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: tie"
+ },
+ "thread_spools": {
+  "model": "trellis2",
+  "why": "TRELLIS 2: tie; spool colours crisper"
+ }
+}

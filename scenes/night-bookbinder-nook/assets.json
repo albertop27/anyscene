@@ -1,0 +1,108 @@
+{
+ "room": {
+  "w": 3.2,
+  "d": 4.0,
+  "h": 2.6,
+  "note": "x across, y from street door/window (y=0) to back wall (y=4.0), z up. Shelf wall on the left (x=0). Work table centred."
+ },
+ "generate": [
+  {
+   "id": "book_press",
+   "fit": "h",
+   "size": 1.1,
+   "prompt": "A cast-iron standing bookbinder's nipping press on a heavy four-legged iron stand, a large spoked iron wheel on top driving a vertical screw, flat iron platen, chipped black paint showing rusted iron and polished wear on the wheel rim.",
+   "hero": true
+  },
+  {
+   "id": "paper_cutter",
+   "fit": "h",
+   "size": 0.55,
+   "prompt": "An antique guillotine paper cutter on a wooden table base, cast-iron frame, long curved lever arm with a wooden handle, steel blade, wooden bed with a brass ruler scale, worn and oiled.",
+   "hero": true
+  },
+  {
+   "id": "sewing_frame",
+   "fit": "h",
+   "size": 0.5,
+   "prompt": "A wooden bookbinding sewing frame: a flat wooden base with two upright threaded wooden posts and a crossbar on top, several taut linen cords running down from the crossbar to the base, a half-sewn stack of book signatures sitting on the base.",
+   "hero": true
+  },
+  {
+   "id": "desk_lamp",
+   "fit": "h",
+   "size": 0.45,
+   "prompt": "An old angled metal desk lamp with a jointed arm and springs, a conical dark-green enamel shade, heavy round cast base, scuffed paint.",
+   "hero": false
+  },
+  {
+   "id": "pendant_lamp",
+   "fit": "h",
+   "size": 0.35,
+   "prompt": "A brass dome pendant ceiling lamp with a short brass rod and canopy, warm tarnished brass with darker patina, opal glass diffuser at the bottom.",
+   "hero": false
+  },
+  {
+   "id": "paper_roll_rack",
+   "fit": "h",
+   "size": 0.9,
+   "prompt": "A wooden floor-standing rack holding six large rolls of marbled decorative paper and kraft paper on horizontal dowels, worn varnished wood.",
+   "hero": false
+  },
+  {
+   "id": "stool",
+   "fit": "h",
+   "size": 0.65,
+   "prompt": "A worn wooden counter stool with a round seat, four splayed legs and a footrest ring, seat polished pale by years of use, scuffed feet.",
+   "hero": false
+  },
+  {
+   "id": "glue_pot",
+   "fit": "h",
+   "size": 0.18,
+   "prompt": "A white enamel double-boiler glue pot with a chipped rim and dried brown glue drips down the side, a flat glue brush resting inside it.",
+   "hero": false
+  },
+  {
+   "id": "bone_folder_set",
+   "fit": "h",
+   "size": 0.2,
+   "prompt": "A chipped ceramic jar holding several bookbinding tools: cream bone folders, wooden-handled awls and a small metal spatula, standing upright.",
+   "hero": false
+  },
+  {
+   "id": "leather_stack",
+   "fit": "max",
+   "size": 0.5,
+   "prompt": "A loose stack of folded tanned leather hides in burgundy, dark green and tan, soft irregular edges, lying flat.",
+   "hero": false
+  },
+  {
+   "id": "book_stack",
+   "fit": "h",
+   "size": 0.3,
+   "prompt": "A small stack of five old cloth-bound hardback books of different sizes, faded spines in maroon, navy and ochre, frayed corners, blank spines without lettering.",
+   "hero": false
+  },
+  {
+   "id": "thread_spools",
+   "fit": "h",
+   "size": 0.12,
+   "prompt": "An open shallow wooden box filled with wooden spools of waxed linen thread in natural, red and black, a few loose thread ends.",
+   "hero": false
+  },
+  {
+   "id": "old_radio",
+   "fit": "h",
+   "size": 0.28,
+   "prompt": "A small 1950s wooden tabletop tube radio with a rounded wooden case, a cloth speaker grille, a glass tuning dial and two bakelite knobs, worn varnish.",
+   "hero": false
+  },
+  {
+   "id": "plant_pot",
+   "fit": "h",
+   "size": 0.45,
+   "prompt": "A potted fern in a chipped terracotta clay pot, lush drooping green fronds, a little soil spilled on the rim.",
+   "hero": false
+  }
+ ]
+}
