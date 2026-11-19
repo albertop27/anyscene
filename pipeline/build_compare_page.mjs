@@ -1,18 +1,27 @@
 // Builds out/page/index.html + jpgs from out/compare (render_compare.py) and out/compare/verdicts.json.
-//   node pipeline/build_compare_page.mjs
+//   node pipeline/build_compare_page.mjs [--models id:Label:how,id:Label:how] [--config page.json] [--cmp out/compare]
+// Model names are configurable (local fork). Default = our local models: trellis2 (TRELLIS 2) and pixal3d (Pixal3D).
+// The model id is the folder name under out/compare/ and assets/gen/ (same as generate/local.py --models).
+// page.json may hold any of: models [[id,label,how]], props, concepts, title, intro, refLabel, conceptsNote.
+// --models wins over the config file. Upstream's fal run was tripo-h31,tripo-p2,meshy.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const FF = process.env.FFMPEG || 'ffmpeg';
-const CMP = 'out/compare';
+const argv = process.argv.slice(2);
+const opt = (k) => { const i = argv.indexOf(`--${k}`); return i >= 0 ? argv[i + 1] : undefined; };
+const cfg = opt('config') ? JSON.parse(readFileSync(opt('config'), 'utf8')) : {};
+const CMP = opt('cmp') || 'out/compare';
 const PAGE = 'out/page';
-const MODELS = [
-  ['tripo-h31', 'Tripo H3.1', 'detailed geometry + texture'],
-  ['tripo-p2', 'Tripo P2', 'extreme texture, delit'],
-  ['meshy', 'Meshy 7.1', '4k geometry, PBR'],
+const DEFAULT_MODELS = [
+  ['trellis2', 'TRELLIS 2', 'local, 150k faces, 2K texture'],
+  ['pixal3d', 'Pixal3D', 'local, 150k faces, 2K texture'],
 ];
-const PROPS = [
+const MODELS = opt('models')
+  ? opt('models').split(',').map((t) => { const [id, label, how] = t.split(':'); return [id, label || id, how || '']; })
+  : cfg.models || DEFAULT_MODELS;
+const PROPS = cfg.props || [
   ['oscilloscope', 'CRT oscilloscope', 'repair', 'hard surface, panel labels'],
   ['solder_station', 'Soldering station', 'repair', 'thin cable, coiled holder'],
   ['helping_hands', 'Helping hands', 'repair', 'wiry arms, glass lens'],
@@ -33,11 +42,11 @@ const jpg = (src, dst, w) => {
   files[dst] = join(PAGE, dst);
 };
 
-const CONCEPTS = [
+const CONCEPTS = cfg.concepts || [
   ['repair', 'wide', 'Repair shop, wide'], ['repair', 'detail', 'Repair bench, close'],
   ['ramen', 'wide', 'Ramen shop, wide'], ['ramen', 'detail', 'Ramen counter, close'],
 ];
-for (const [s, k] of CONCEPTS) jpg(`refs/${s}/concept_${k}_sunburst_0.png`, `img/concept_${s}_${k}.jpg`, 1100);
+for (const [s, k] of CONCEPTS) if (existsSync(`refs/${s}/concept_${k}_sunburst_0.png`)) jpg(`refs/${s}/concept_${k}_sunburst_0.png`, `img/concept_${s}_${k}.jpg`, 1100);
 
 for (const [p] of PROPS) {
   jpg(`refs/props/${p}_0.png`, `img/${p}_ref.jpg`, 640);
@@ -57,7 +66,7 @@ const texSummary = (imgs = {}) => {
 };
 const gen = existsSync(join(CMP, 'gen.json')) ? JSON.parse(readFileSync(join(CMP, 'gen.json'), 'utf8')) : {};
 
-const score = { 'tripo-h31': 0, 'tripo-p2': 0, meshy: 0 };
+const score = Object.fromEntries(MODELS.map(([m]) => [m, 0]));
 for (const v of Object.values(verdicts.props ?? {})) if (v.winner in score) score[v.winner]++;
 
 const rows = PROPS.map(([p, name, scene, stress]) => {
@@ -66,18 +75,20 @@ const rows = PROPS.map(([p, name, scene, stress]) => {
     const s = stats[m]?.[p];
     const imgs = VIEWS.map((view) => `<img data-view="${view}" ${view === 'beauty' ? '' : 'hidden'} src="img/${p}_${m}_${view}.jpg" alt="${esc(label)} ${esc(name)}, ${view}" loading="lazy">`).join('');
     const meta = !s ? '<span class="bad">not generated</span>' : s.error ? `<span class="bad">import failed</span>` :
-      `<span>${kfmt(s.tris)} tris · ${gen[m]?.[p]?.mb ?? '?'} MB GLB · ${gen[m]?.[p]?.sec ?? '?'} s</span><span>${esc(texSummary(s.images))}</span><span>${s.size_m.map((x) => x.toFixed(2)).join(' × ')} m${m === 'meshy' ? ' (unscaled)' : ''}</span>`;
+      `<span>${kfmt(s.tris)} tris · ${gen[m]?.[p]?.mb ?? '?'} MB GLB · ${gen[m]?.[p]?.sec ?? '?'} s</span><span>${esc(texSummary(s.images))}</span><span>${s.size_m.map((x) => x.toFixed(2)).join(' × ')} m${cfg.unscaled?.includes(m) ? ' (unscaled)' : ''}</span>`;
     const win = v.winner === m;
     return `<figure class="cell${win ? ' win' : ''}"><div class="frame">${imgs}${win ? '<span class="chip">pick</span>' : ''}</div>
       <figcaption><b>${esc(label)}</b>${meta}${v.notes?.[m] ? `<p>${esc(v.notes[m])}</p>` : ''}</figcaption></figure>`;
   }).join('');
   return `<section class="prop" id="${p}">
     <header><h2>${esc(name)}</h2><span class="tag ${scene}">${scene === 'repair' ? 'Repair bench' : 'Ramen shop'}</span><span class="stress">stress: ${esc(stress)}</span></header>
-    <div class="grid"><figure class="cell ref"><div class="frame"><img src="img/${p}_ref.jpg" alt="${esc(name)} reference"></div><figcaption><b>Reference</b><span>GPT Image 2.5 Sunburst</span></figcaption></figure>${cells}</div>
+    <div class="grid"><figure class="cell ref"><div class="frame"><img src="img/${p}_ref.jpg" alt="${esc(name)} reference"></div><figcaption><b>Reference</b><span>${esc(REFLABEL)}</span></figcaption></figure>${cells}</div>
   </section>`;
 }).join('\n');
 
-const html = `<title>Tripo vs Meshy Props</title>
+const TITLE = cfg.title || `${MODELS.map(([, l]) => l).join(' vs ')} props`;
+const REFLABEL = cfg.refLabel || 'Reference image';
+const html = `<title>${esc(TITLE)}</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -129,11 +140,11 @@ figcaption p{margin:4px 0 0;color:var(--fg);font-size:12.5px;line-height:1.45}
 </style>
 <main>
   <div class="intro">
-    <h1>Tripo vs Meshy on late-night props</h1>
-    <p>Eight props for the repair bench and ramen shop. Each one is the same GPT Image 2.5 reference through Tripo H3.1, Tripo P2 and Meshy 7.1 at their highest settings, rendered in Blender Cycles under one studio light and camera fit. Use the toggle to see the back (the side the generator had to invent) and clay with wireframe.</p>
+    <h1>${esc(TITLE)}</h1>
+    <p>${esc(cfg.intro || `${PROPS.length} props. Each one is the same reference through ${MODELS.map(([, l]) => l).join(', ')}, rendered in Blender under one studio light and camera fit. Use the toggle to see the back (the side the generator had to invent) and clay with wireframe.`)}</p>
   </div>
-  <section class="concepts"><h2>Concept shots</h2><p>GPT Image 2.5 Sunburst, picked over Flare for legible Japanese signage and a more natural grade. These are the targets each scene is built toward.</p>
-    <div class="cgrid">${CONCEPTS.map(([s, k, label]) => `<figure class="cell"><div class="cframe"><img src="img/concept_${s}_${k}.jpg" alt="${esc(label)} concept"></div><figcaption><b>${esc(label)}</b></figcaption></figure>`).join('')}</div>
+  <section class="concepts"><h2>Concept shots</h2><p>${esc(cfg.conceptsNote || 'The targets each scene is built toward.')}</p>
+    <div class="cgrid">${CONCEPTS.filter(([s, k]) => files[`img/concept_${s}_${k}.jpg`]).map(([s, k, label]) => `<figure class="cell"><div class="cframe"><img src="img/concept_${s}_${k}.jpg" alt="${esc(label)} concept"></div><figcaption><b>${esc(label)}</b></figcaption></figure>`).join('')}</div>
   </section>
   <h2>Generator results</h2>
   <div class="board">${MODELS.map(([m, label, how]) => `<div class="score${score[m] === Math.max(...Object.values(score)) && score[m] > 0 ? ' lead' : ''}"><b>${score[m]}</b><span>${esc(label)} picks · ${esc(how)}</span></div>`).join('')}</div>

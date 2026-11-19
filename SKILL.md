@@ -1,6 +1,6 @@
 ---
 name: anyscene
-description: Build a photoreal, film-style Blender scene from a one-paragraph brief. Generate concept images and every prop with image→3D models on fal, then script the layout, set dressing, grime, lighting, camera moves and grade. Use it when someone asks for a realistic 3D environment, a set or a cinematic shot of a place, whether starting fresh or extending an existing AnyScene scene.
+description: Build a photoreal, film-style Blender scene from a one-paragraph brief. Generate concept images and every prop locally (ComfyUI image models, then TRELLIS 2 and Pixal3D image→3D), then script the layout, set dressing, grime, lighting, camera moves and grade. Use it when someone asks for a realistic 3D environment, a set or a cinematic shot of a place, whether starting fresh or extending an existing AnyScene scene.
 ---
 
 # AnyScene
@@ -18,8 +18,8 @@ Never hand-edit a .blend you can't regenerate.
 |---|---|
 | Blender 5.0+ | `$BLENDER`. Background mode (`-b`) for everything; the GUI is only for a human to look. |
 | ffmpeg | `$FFMPEG`. Needs an h264 encoder (`libx264` or `h264_nvenc`), `curves`, `hue`, `vignette`, `noise`, `xfade`. |
-| Node 20+ | for `generate/fal.mjs` |
-| fal key | `FAL_KEY` env var. Never print or log it. |
+| Node 20+ | for `pipeline/build_compare_page.mjs` and the other page builders |
+| Playground venv | `<playground>/.venv/Scripts/python.exe`, runs `generate/local.py` (local ComfyUI, no key, no spend). Upstream used fal and `FAL_KEY`: we don't. |
 | GPU | 12–16 GB is enough for one Cycles render at a time. Two at once runs out of memory: see GPU rules. |
 
 ## Layout of a scene
@@ -39,7 +39,7 @@ assets/gen/<model>/<id>/model.glb   raw generator output (never edited)
 ```
 
 Reusable pieces (don't fork them per scene unless you need to change them):
-- `generate/fal.mjs`: image and 3D generation, with an append-only spend log.
+- `generate/local.py`: image and 3D generation on the local ComfyUI (replaces `generate/fal.mjs`, which needs a paid key and stays only for reference). One GPU job at a time.
 - `pipeline/gpu_run.sh`: a FIFO GPU queue.
 - `pipeline/render_compare.py`: same-light comparison renders.
 - `camera/`: camera rig and shot renderer.
@@ -66,8 +66,9 @@ Real places are small: the repair shop is about 3.5 × 6 m. Keep it tight. Densi
 
 ### 2. Concept images
 
-Run `node generate/fal.mjs image --variant sunburst --out refs/<scene>/concept_wide --prompt "..."`, and again for a
-detail shot. GPT Image 2.5 Sunburst beat Flare on legible signage text and natural grade. These set palette, clutter level
+Run `python generate/local.py ref --out refs/<scene>/concept_wide --model krea2 --prompt "..."`, and again for a
+detail shot (use the playground venv's python; paths relative to this repo). Upstream picked GPT Image 2.5 Sunburst for
+legible signage text. Krea 2 is our default and Qwen Image 2.1 (`--model qwen21`) is the one to try if text matters. These set palette, clutter level
 and the prop list; you don't match them shot for shot.
 
 **Gate:** the user (or you, if running solo) agrees on the look.
@@ -92,12 +93,12 @@ Give every generated prop:
 ### 4. References → 3D, both models
 
 For each prop:
-1. Generate a reference with the scan template appended. This is the exact text the reference scenes used:
+1. Generate a reference with the scan template appended (`python generate/local.py ref --out refs/props/<id> --model krea2 --prompt "<prop>. <template>"`; the output is `refs/props/<id>_0.png`). This is the exact text the reference scenes used:
    > No real-world brand names or logos. Product reference photograph for 3D scanning. The entire object fully visible and centered, three-quarter front view from slightly above, plain seamless light-grey background, soft even diffuse studio lighting, no harsh shadows, no other objects, no hands, realistic used and worn condition, sharp focus, true-to-life materials.
-2. Send the same reference to **both** Tripo H3.1 (`--model tripo-h31`) and Meshy 7.1 (`--model meshy`).
+2. Send the same reference to **both** local generators: `python generate/local.py 3d --ref refs/props/<id>_0.png --id <id>` (TRELLIS 2 and Pixal3D, written to `assets/gen/<model>/<id>/model.glb`; add `--models trellis2` to use one).
 
 Notes:
-- Run about 12 jobs concurrently. About 10–20% fail transiently (504, ECONNRESET, Meshy timeouts after about 10 min); re-run the same ids. The script skips GLBs that already exist.
+- **Local, so sequential:** one GPU, one ComfyUI job at a time, in the background. About 2.5–5 min per prop for 3D with both models. Re-running skips outputs that exist (`--force` to redo).
 - **Never run two generation passes at once.** Existence is checked at start, so in-flight jobs get double-submitted.
 - References often come back with real brands even when told not to. Check every reference and regenerate those that carry one as `<id>_nb`, with a fictional brand.
 
@@ -105,8 +106,11 @@ Notes:
 
 ### 5. Compare and pick
 
-Render reference | Tripo | Meshy, front, back and clay, under the same light (`render_compare.py`), then sheet them. Pick per prop and
+Render reference | TRELLIS 2 | Pixal3D, front, back and clay, under the same light (`render_compare.py`, or AnyKit's `kit/tools/compare.py -- --models trellis2,pixal3d --ids ...`), then sheet them
+(`node pipeline/build_compare_page.mjs`, which defaults to trellis2 and pixal3d; `--models id:Label:how,...` or `--config page.json` to change them). Pick per prop and
 record the choice and a one-line why in `picks.json`.
+
+The numbers below are upstream's, from Tripo and Meshy on fal. They do not transfer to our models: judge ours by eye and note the finding in `NOTES.md`.
 
 What the reference scenes found across ~150 props:
 - **Meshy 7.1** wins about 70% of the time: small consumer items, sharper printed labels.
@@ -119,7 +123,7 @@ What the reference scenes found across ~150 props:
 ### 6. Prep
 
 Turn every pick into `props/<id>.blend`:
-- **Front faces −Y.** Tripo's front faces +X, so rotate it −90°; Meshy's already faces −Y. Rotate the mesh data, not the object. Tripo H3.1 with `orientation: align_image` also bakes a ±20–30° Z rotation into the glTF node (to match the reference photo's three-quarter view): clear that node rotation before the −90° turn, and frame by vertex bounds, not `bound_box`.
+- **Front faces −Y.** (Upstream: Tripo's front faces +X, so rotate it −90°; Meshy's already faces −Y. TRELLIS 2 and Pixal3D both face −Y like Meshy, so there's no rotation; check with a compare render. Pixal3D may also come out tilted 30–40°: see docs/TODO.md. AnyKit's `kit/tools/normalize.py --gen trellis2|pixal3d` already does real scale, bottom-centre origin and LOD1 and can be reused.) Rotate the mesh data, not the object. Tripo H3.1 with `orientation: align_image` also bakes a ±20–30° Z rotation into the glTF node (to match the reference photo's three-quarter view): clear that node rotation before the −90° turn, and frame by vertex bounds, not `bound_box`.
 - **Real scale** from `h`/`dims`.
 - **Bottom-centre origin.**
 - **Decimate** heroes to about 150k tris.
@@ -259,17 +263,12 @@ The scene supplies four "dollhouse" clips, one 120° orbit with the ceiling and 
 - **Cross-scene ordering:** marker files only, e.g. `.gpu.<scene>_done`, and create one only when the work is actually done.
 - **Other GPU apps:** another GPU-heavy app (Houdini, Unreal) running alongside can slow Cycles 8×. Tell the user rather than closing their apps.
 
-## Budget and time (fal, Oct 2026)
+## Budget and time (local)
 
-| Item | Cost |
-|---|---|
-| Reference image | ~$0.25 |
-| Tripo H3.1 | ~$0.60 |
-| Meshy 7.1 | ~$0.80 |
-| Per prop, both models | **~$1.65** |
-| ~90-prop scene | ~$150 |
-
-Every call is logged to `generate/spend.jsonl`; `node generate/fal.mjs spend` totals it.
+Upstream spent about $1.65 per prop on fal (about $150 for a 90-prop scene). Here generation costs nothing but GPU time:
+a reference takes 8–15 s, 3D about 2.5–5 min per prop with both generators (TRELLIS 2 about 140–210 s, Pixal3D about
+80–120 s). A 12–15 prop scene is about 1 hour of GPU, a 90-prop scene 4–7 hours. Plan with the owner and get sign-off
+before starting a long run.
 
 Time on one 16 GB GPU: a scene is roughly a day of agent work, and the final shots are about 1–2 GPU-hours.
 
