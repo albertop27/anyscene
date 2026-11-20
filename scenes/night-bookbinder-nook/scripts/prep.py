@@ -20,7 +20,8 @@ from mathutils import Matrix, Vector
 
 ROOT = os.environ.get("ANYSCENE_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 SCN = os.path.join(ROOT, "scenes", "night-bookbinder-nook")
-CANON = os.environ.get("CANONICALIZE", r"canonicalize.py")
+# default: the playground's canonicalize.py, two levels above this fork (vendor/anyscene -> scripts/blender)
+CANON = os.environ.get("CANONICALIZE") or os.path.abspath(os.path.join(ROOT, "..", "..", "scripts", "blender", "canonicalize.py"))
 MAX_TEX = 2048
 HERO_TRIS, OTHER_TRIS = 150_000, 60_000
 
