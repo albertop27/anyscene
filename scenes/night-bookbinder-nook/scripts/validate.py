@@ -2,12 +2,13 @@
 
 blender -b scenes/night-bookbinder-nook/dressed.blend --python scenes/night-bookbinder-nook/scripts/validate.py -- [--no-grounding]
         [--layout] [--report out.json]
-Flags: FLOAT (lowest point > 1 cm above the support under it), SUNK (contact points > 1 cm inside the support), CLIP (prop x prop
+Flags: FLOAT (prop's underside, probed on a 7x7 grid, > 1 cm above the nearest surface under it), SUNK (contact points > 1 cm inside the support), CLIP (prop x prop
 BVH overlap), FURNITURE (prop mesh, lifted 3 mm, intersecting shell/furniture/shelving), OUT (outside the room box), SCALE (off the
 manifest height by > 25 %).
 --layout: checking a layout.blend the owner edited by hand. Besides the tagged props it also checks NEW meshes: anything in the
 "any top-level mesh without the "built" tag that build.sh --hand puts on everything (an appended or freshly added object).
-Summary line: "VALIDATE n issues over m props". Then runs grounding.py (feet-based float check) with --max-gap 2.
+Summary line: "VALIDATE n issues over m props". Then runs grounding.py (feet-based float check) with --max-gap 2, except with
+--layout, where the grid float check covers it (grounding.py's lowest-vertex rays miss a support narrower than the prop).
 """
 import json
 import os
@@ -86,6 +87,55 @@ def sunk_depth(o, trees_):
     return depths[len(depths) // 2], (max(into, key=into.get) if into else None)
 
 
+def float_gap(o, trees_, n=7):
+    """Contact gap at the prop's real underside. An n x n grid over its footprint: at each point a ray UP from below finds
+    the prop's own bottom there (so points over empty parts of an L-shape or a gap between legs are skipped), then a ray
+    DOWN from just under that bottom finds the nearest other surface. The prop rests if any point touches, so the gap is
+    the smallest one. Works for tilted props and for props wider than their support (a sheet on a book stack); the
+    lowest-corner check missed both."""
+    own = trees_.get(o.name)
+    if own is None:
+        return 0.0, None
+    lo, hi = world_bb(o)
+    probes = []
+    for i in range(n):
+        for j in range(n):
+            x = lo.x + (hi.x - lo.x) * (i + 0.5) / n
+            y = lo.y + (hi.y - lo.y) * (j + 0.5) / n
+            b = own.ray_cast(Vector((x, y, lo.z - 1.0)), Vector((0, 0, 1)), 1.0 + (hi.z - lo.z) + 0.01)
+            if b[0] is not None:
+                probes.append(b[0])
+    # plus the lowest vertices (feet, base rings): thin legs fall between grid points
+    eo = o.evaluated_get(dg)
+    me = eo.to_mesh()
+    vs = [o.matrix_world @ v.co for v in me.vertices]
+    eo.to_mesh_clear()
+    if vs:
+        band = max(0.01, 0.03 * (hi.z - lo.z))
+        feet = [v for v in vs if v.z <= lo.z + band]
+        probes += feet[:: max(1, len(feet) // 40)]
+    best = None
+    for p in probes:
+        if True:
+            # start 2 cm above the underside: a prop dropped flush sits a hair INTO its support, and a ray starting just
+            # below the underside would begin inside the support and report its thickness (a 6.9 cm table top)
+            start = p + Vector((0, 0, 0.02))
+            near = None
+            for name, t in trees_.items():
+                if name == o.name:
+                    continue
+                h = t.ray_cast(start, Vector((0, 0, -1)), 50.0)
+                if h[0] is not None and (near is None or h[3] < near[0]):
+                    near = (h[3], name)
+            if near:
+                g = near[0] - 0.02  # distance from the underside down to the surface (negative = resting a hair into it)
+                if best is None or g < best[0]:
+                    best = (g, near[1])
+    if best is None:
+        return lo.z, None
+    return max(0.0, best[0]), best[1]
+
+
 TREES = all_trees()
 
 
@@ -112,23 +162,9 @@ for o in props:
         if depth > 0.01:
             issues.append(f"SUNK {o.name} {depth * 100:.1f} cm into {into}")
             continue  # its float ray starts inside the support and would report the support's thickness
-        z0 = o.location.z
-        o.location.z = -100  # out of the way of its own ray
-        bpy.context.view_layer.update()
-        dg2 = bpy.context.evaluated_depsgraph_get()
-        # same 5-ray footprint probe as dress.drop(): a prop half on a sheet of paper is resting, not floating
-        cx, cy, hx, hy = (lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (hi.x - lo.x) * 0.35, (hi.y - lo.y) * 0.35
-        best = None
-        for dx, dy in ((0, 0), (hx, hy), (-hx, hy), (hx, -hy), (-hx, -hy)):
-            h_, l_, n, i, ob_, m = sc.ray_cast(dg2, Vector((cx + dx, cy + dy, lo.z + 0.02)), Vector((0, 0, -1)))
-            if h_ and (best is None or l_.z > best[0]):
-                best = (l_.z, ob_)
-        o.location.z = z0
-        bpy.context.view_layer.update()
-        gap = (lo.z - best[0]) if best else lo.z
-        hit, ob = best is not None, (best[1] if best else None)
+        gap, under = float_gap(o, TREES)
         if gap > 0.01:
-            issues.append(f"FLOAT {o.name} {gap * 100:.1f} cm above {ob.name if hit else 'nothing'}")
+            issues.append(f"FLOAT {o.name} {gap * 100:.1f} cm above {under or 'nothing'}")
     a = man.get(o.get("prop_id"))
     if a and not o.get("scaled"):
         got = o.dimensions.z if a["fit"] == "h" else max(o.dimensions)
@@ -171,7 +207,7 @@ if "--report" in argv:
     json.dump({"blend": bpy.data.filepath, "props": len(props), "new": new_props, "issues": issues},
               open(argv[argv.index("--report") + 1], "w"), indent=1)
 
-if "--no-grounding" not in argv:
+if "--no-grounding" not in argv and not LAYOUT:  # --layout: the grid float check above replaces grounding.py
     sys.argv = ["blender", "--", "--prefix", "bk_", "--max-gap", "2", "--tol", "0.01"]
     runpy.run_path(os.path.join(ROOT, "pipeline", "grounding.py"), run_name="__main__")
     sys.argv = ["blender", "--", "--prefix", "bk_", "--max-gap", "2", "--tol", "0.01", "--all"]
